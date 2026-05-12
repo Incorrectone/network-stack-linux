@@ -8,7 +8,9 @@
 #define MTU 1518
 
 #include "tun_alloc.h"
+#include "stack.h"
 
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +18,9 @@
 
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#include <linux/if_ether.h>
+#include <netinet/in.h>
+
 
 char tap_name[IFNAMSIZ];
 
@@ -38,12 +43,12 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    char buffer[MTU];
+    ethernet_frame received_frame;
 
     while(1) {
 
         /* Note that "buffer" should be at least the MTU size of the interface, eg 1500 bytes */
-        int nread = read(tap_fd, buffer, sizeof(buffer));
+        int nread = read(tap_fd, &received_frame, sizeof(received_frame));
 
         if(nread < 0) {
             perror("Reading from interface");
@@ -52,7 +57,16 @@ int main(int argc, char *argv[]) {
         }
 
         /* Do whatever with the data */
-        printf("Read %d bytes from device %s\n", nread, tap_name);
+        uint16_t ether_type = ntohs(received_frame.ethernet_header.h_proto);
+
+        switch (ether_type){
+            case(ETH_P_ARP):
+                process_arp(tap_fd, &received_frame, nread);
+                break;
+            default:
+                print_ethernet_frame(&received_frame, nread);
+                break;
+        }
     }
 
 }
